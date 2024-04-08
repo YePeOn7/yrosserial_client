@@ -44,6 +44,18 @@ class MessageType:
     Odometry2d = 3
     Twist2d = 4
 
+def messageTypeStr(messageType : MessageType):
+    if(messageType == MessageType.Float32):
+        return "Float32"
+    elif(messageType == MessageType.Float64):
+        return "Float64"
+    elif(messageType == MessageType.String):
+        return "String"
+    elif(messageType == MessageType.Odometry2d):
+        return "Odometry2d"
+    elif(messageType == MessageType.Twist2d):
+        return "Twist"
+
 def processMessage(message):
     global subDict
     messageLen = message[0]
@@ -74,7 +86,7 @@ def processMessage(message):
             # print(f"type        : {subInfo.type}")
             # print(f"topicName   : {subInfo.topicName}")
             # print("--------------")
-            print(f"Subscribe: {subInfo.topicName} with topicId: {subInfo.topicId}")
+            print(f"Subscribe: {subInfo.topicName} ({messageTypeStr(subInfo.type)}) with topicId: {subInfo.topicId}")
             subDict[subInfo.topicId] = subInfo
 
         if(dt[4] == 1): #Pub
@@ -88,7 +100,7 @@ def processMessage(message):
             # print(f"type        : {pubInfo.type}")
             # print(f"topicName   : {pubInfo.topicName}")
             # print("--------------")
-            print(f"Publish: {pubInfo.topicName} with topicId: {pubInfo.topicId}")
+            print(f"Publish: {pubInfo.topicName} ({messageTypeStr(pubInfo.type)}) with topicId: {pubInfo.topicId}")
             pubDict[pubInfo.topicId] = pubInfo # append to dict
 
         # print(dt)
