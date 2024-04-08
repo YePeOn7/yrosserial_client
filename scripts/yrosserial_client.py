@@ -1,35 +1,16 @@
 #!/usr/bin/python3
 
-from typing import Dict
+from typing import Dict, Optional # Use as a hint for intellisense
 import serial
 import struct
 import time
 import rospy
-
-class PubInfo:
-    def __init__(self) -> None:
-        self.topicName = None
-        self.topicId = None
-        self.type = None
-        self.publisher = None
-
-class SubInfo:
-    def __init__(self) -> None:
-        self.topicName = None
-        self.topicId = None
-        self.type = None
-        self.subscriber = None
-
-class PacketRequestTopic:
-    def __init__(self, header1 = 0x05, header2 = 0x09, length = 0x02, instruction = 0x01):
-        self.header1 = header1
-        self.header2 = header2
-        self.length = length
-        self.instruction = instruction
-        self.checksum = self.length + self.instruction
-
-    def serialize(self) -> bytes:
-        return struct.pack("5b", self.header1, self.header2, self.length, self.instruction, self.checksum)
+from rospy.impl.tcpros import DEFAULT_BUFF_SIZE
+from std_msgs.msg import String, Float32, Float64
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+from tf.transformations import quaternion_from_euler
+import math
 
 class ReceivingState:
     GET_HEADER1 = 0
@@ -44,6 +25,124 @@ class MessageType:
     Odometry2d = 3
     Twist2d = 4
 
+messageTypeMap = {
+    MessageType.Float32: Float32,
+    MessageType.Float64: Float64,
+    MessageType.String: String,
+    MessageType.Odometry2d: Odometry,
+    MessageType.Twist2d: Twist
+}
+
+class Publisher(rospy.Publisher):
+    def __init__(self, name, messageType : MessageType, subscriber_listener=None, tcp_nodelay=False, latch=False, headers=None, queue_size=10):
+        if(messageType in messageTypeMap):
+            super().__init__(name, messageTypeMap[messageType], subscriber_listener, tcp_nodelay, latch, headers, queue_size)
+            self.messageType = messageType
+        else:
+            raise ValueError(f"Unsupported messageType: {messageType}")
+    
+    def publishCustom(self, message):
+        if(self.messageType == MessageType.String):
+            #dt[0] --> length
+            #dt[1] --> topicId
+            #dt[2] --> messagetype
+            #dt[3] --> string
+            #dt[-1] --> checksum
+            dt = struct.unpack(f"3B{message[0]-3}sB", message)
+            strMessage = dt[3][:-1].decode()
+            self.publish(strMessage)
+            # print(f"Get Message ({dt[1]}): {strMessage} --> {self.name}")
+        elif(self.messageType == MessageType.Float32):
+            # for i in message:
+            #     print(i, end=" ")
+            # print("")
+            # print(f"len msg: {len(message)}")
+            dt = struct.unpack(f"<3BfB", message)
+            float32Msg = Float32()
+            float32Msg.data = dt[3]
+            self.publish(float32Msg)
+            # print(f"Get Float32 Message: {floatMsg:.4f} --> {self.name}")
+        elif(self.messageType == MessageType.Float64):
+            # for i in message:
+            #     print(i, end=" ")
+            # print("")
+            # print(f"len msg: {len(message)}")
+            dt = struct.unpack(f"<3BdB", message)
+            float64Msg = Float64()
+            float64Msg.data = dt[3]
+            self.publish(float64Msg)
+            # print(f"Get Float64 Message: {float64Msg:.4f} --> {self.name}")
+        elif(self.messageType == MessageType.Odometry2d):
+            # for i in message:
+            #     print(i, end=" ")
+            # print("")
+            # print(f"len msg: {len(message)}")
+            dt = struct.unpack(f"<3B3fB", message)
+            odometryMsgX = dt[3]
+            odometryMsgY = dt[4]
+            odometryMsgZ = dt[5]
+
+            msg = Odometry()
+            msg.pose.pose.position.x = odometryMsgX
+            msg.pose.pose.position.y = odometryMsgY
+
+            q = quaternion_from_euler(0, 0, math.radians(odometryMsgZ))
+            msg.pose.pose.orientation.x = q[0]
+            msg.pose.pose.orientation.y = q[1]
+            msg.pose.pose.orientation.z = q[2]
+            msg.pose.pose.orientation.w = q[3]
+            self.publish(msg)
+
+            # print(f"Get Odometry Message: x: {odometryMsgX:.4f}, y:{odometryMsgY:.4f}, z:{odometryMsgZ:.4f} --> {self.name} -- {q}")
+        elif(self.messageType == MessageType.Twist2d):
+            # for i in message:
+            #     print(i, end=" ")
+            # print("")
+            # print(f"len msg: {len(message)}")
+            dt = struct.unpack(f"<3B3fB", message)
+            twistMsgX = dt[3]
+            twistMsgY = dt[4]
+            twistMsgZ = dt[5]
+
+            msg = Twist()
+            msg.linear.x = twistMsgX
+            msg.linear.y = twistMsgY
+            msg.angular.z = twistMsgZ
+            self.publish(msg)
+            # print(f"Get Twist Message: x: {twistMsgX:.4f}, y:{twistMsgY:.4f}, z:{twistMsgZ:.4f} --> {self.name}")
+
+class Subscriber(rospy.Subscriber):
+    def __init__(self, name, messageType : MessageType, callback=None, callback_args=None, queue_size=None, buff_size=..., tcp_nodelay=False):
+        if(messageType in messageTypeMap):
+            super().__init__(name, messageTypeMap[messageType], callback, callback_args, queue_size, buff_size, tcp_nodelay)
+        else:
+            raise ValueError(f"Unsupported messageType: {messageType}")
+
+class PubInfo:
+    def __init__(self) -> None:
+        self.topicName = None
+        self.topicId = None
+        self.type = None
+        self.publisher : Optional[Publisher] = None
+
+class SubInfo:
+    def __init__(self) -> None:
+        self.topicName = None
+        self.topicId = None
+        self.type = None
+        self.subscriber : Optional[Subscriber] = None
+
+class PacketRequestTopic:
+    def __init__(self, header1 = 0x05, header2 = 0x09, length = 0x02, instruction = 0x01):
+        self.header1 = header1
+        self.header2 = header2
+        self.length = length
+        self.instruction = instruction
+        self.checksum = self.length + self.instruction
+
+    def serialize(self) -> bytes:
+        return struct.pack("5b", self.header1, self.header2, self.length, self.instruction, self.checksum)
+
 def messageTypeStr(messageType : MessageType):
     if(messageType == MessageType.Float32):
         return "Float32"
@@ -55,9 +154,10 @@ def messageTypeStr(messageType : MessageType):
         return "Odometry2d"
     elif(messageType == MessageType.Twist2d):
         return "Twist"
-
+    
 def processMessage(message):
     global subDict
+    global pubDict
     messageLen = message[0]
     # check message[1] --> instruction / TopicId
     # no need to convert message[1] to int. When accessing the bytes variable by using []. it will automatically convert into int
@@ -79,7 +179,8 @@ def processMessage(message):
             subInfo = SubInfo()
             subInfo.topicId = dt[2]
             subInfo.type = dt[3]
-            subInfo.topicName = dt[5].decode()
+            subInfo.topicName = dt[5][:-1].decode() # need to remove null terminator before decode so it will be valid for rostopic name
+            # subInfo.subscriber = Subscriber(subInfo.topicName, subInfo.type)
 
             # print("--------- Subscribe ---------")
             # print(f"topicId     : {subInfo.topicId}")
@@ -93,7 +194,8 @@ def processMessage(message):
             pubInfo = PubInfo()
             pubInfo.topicId = dt[2]
             pubInfo.type = dt[3]
-            pubInfo.topicName = dt[5].decode()
+            pubInfo.topicName = dt[5][:-1].decode() # need to remove null terminator before decode so it will be valid for rostopic name
+            pubInfo.publisher = Publisher(pubInfo.topicName, pubInfo.type)
 
             # print("--------- Publish ---------")
             # print(f"topicId     : {pubInfo.topicId}")
@@ -121,58 +223,14 @@ def processMessage(message):
         # print(f"calculated checksum: {checksum} --- obtained checksum: {message[-1]}")
         # print(f"----- get messageType : {messageType}")
         if(checksum == message[-1]):
-            if(pubInfo.type == MessageType.String):
-                #dt[0] --> length
-                #dt[1] --> topicId
-                #dt[2] --> messagetype
-                #dt[3] --> string
-                #dt[-1] --> checksum
-                dt = struct.unpack(f"3B{message[0]-3}sB", message)
-                strMessage = dt[3].decode()
-                print(f"Get Message ({dt[1]}): {strMessage} --> {pubInfo.topicName}")
-            elif(pubInfo.type == MessageType.Float32):
-                # for i in message:
-                #     print(i, end=" ")
-                # print("")
-                # print(f"len msg: {len(message)}")
-                dt = struct.unpack(f"<3BfB", message)
-                floatMsg = dt[3]
-                print(f"Get Float32 Message: {floatMsg:.4f} --> {pubInfo.topicName}")
-            elif(pubInfo.type == MessageType.Float64):
-                # for i in message:
-                #     print(i, end=" ")
-                # print("")
-                # print(f"len msg: {len(message)}")
-                dt = struct.unpack(f"<3BdB", message)
-                float64Msg = dt[3]
-                print(f"Get Float64 Message: {float64Msg:.4f} --> {pubInfo.topicName}")
-            elif(pubInfo.type == MessageType.Odometry2d):
-                # for i in message:
-                #     print(i, end=" ")
-                # print("")
-                # print(f"len msg: {len(message)}")
-                dt = struct.unpack(f"<3B3fB", message)
-                odometryMsgX = dt[3]
-                odometryMsgY = dt[4]
-                odometryMsgZ = dt[5]
-                print(f"Get Odometry Message: x: {odometryMsgX:.4f}, y:{odometryMsgY:.4f}, z:{odometryMsgZ:.4f} --> {pubInfo.topicName}")
-            elif(pubInfo.type == MessageType.Twist2d):
-                # for i in message:
-                #     print(i, end=" ")
-                # print("")
-                # print(f"len msg: {len(message)}")
-                dt = struct.unpack(f"<3B3fB", message)
-                twistMsgX = dt[3]
-                twistMsgY = dt[4]
-                twistMsgZ = dt[5]
-                print(f"Get Twist Message: x: {twistMsgX:.4f}, y:{twistMsgY:.4f}, z:{twistMsgZ:.4f} --> {pubInfo.topicName}")
-
+            pubInfo.publisher.publishCustom(message)
 
 # ----------------- main process -------------------- #
 subDict:Dict[int, SubInfo] = {}
 pubDict:Dict[int, PubInfo] = {}
 
 rospy.init_node("yrosserial_client")
+time.sleep(1)
 baudrate = rospy.get_param("baudrate", 1000000)
 port = rospy.get_param("port", "/dev/ttyACM0")
 
@@ -185,6 +243,7 @@ except Exception as e:
     exit(-1)
 
 rospy.loginfo("Requesting Topic.....")
+pubLog = Publisher("/testX", MessageType.String)
 packetRequestTopic = PacketRequestTopic()
 data = packetRequestTopic.serialize()
 serial_port.write(data)
