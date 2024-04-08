@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from typing import List
+from typing import Dict
 import serial
 import struct
 import time
@@ -11,12 +11,14 @@ class PubInfo:
         self.topicName = None
         self.topicId = None
         self.type = None
+        self.publisher = None
 
 class SubInfo:
     def __init__(self) -> None:
         self.topicName = None
         self.topicId = None
         self.type = None
+        self.subscriber = None
 
 class PacketRequestTopic:
     def __init__(self, header1 = 0x05, header2 = 0x09, length = 0x02, instruction = 0x01):
@@ -43,7 +45,7 @@ class MessageType:
     Twist2d = 4
 
 def processMessage(message):
-    global subList
+    global subDict
     messageLen = message[0]
     # check message[1] --> instruction / TopicId
     # no need to convert message[1] to int. When accessing the bytes variable by using []. it will automatically convert into int
@@ -73,7 +75,7 @@ def processMessage(message):
             # print(f"topicName   : {subInfo.topicName}")
             # print("--------------")
             print(f"Subscribe: {subInfo.topicName} with topicId: {subInfo.topicId}")
-            subList.append(subInfo)
+            subDict[subInfo.topicId] = subInfo
 
         if(dt[4] == 1): #Pub
             pubInfo = PubInfo()
@@ -87,23 +89,17 @@ def processMessage(message):
             # print(f"topicName   : {pubInfo.topicName}")
             # print("--------------")
             print(f"Publish: {pubInfo.topicName} with topicId: {pubInfo.topicId}")
-            pubList.append(pubInfo)
+            pubDict[pubInfo.topicId] = pubInfo # append to dict
 
         # print(dt)
     elif message[1] == 0x03:
         pass
     elif message[1] >= 10: #topicId
-        pubInfo = PubInfo()
-        pubInfo.topicId = message[1]
-        messageType = message[2] ######################################### Consider to be remove, since this info can be obtained from publist
-
-        for pub in pubList:
-            if(pubInfo.topicId == pub.topicId):
-                pubInfo = pub
-                break
-
-        if(pubInfo.type == None):
-            return
+        topicId = message[1]
+        if(topicId in pubDict):
+            pubInfo = pubDict[topicId]
+        else:
+            return # the id hasn't been listed
 
         # calculate checksum
         checksum = 0
@@ -161,8 +157,8 @@ def processMessage(message):
 
 
 # ----------------- main process -------------------- #
-subList:List[SubInfo] = []
-pubList:List[PubInfo] = []
+subDict:Dict[int, SubInfo] = {}
+pubDict:Dict[int, PubInfo] = {}
 
 rospy.init_node("yrosserial_client")
 baudrate = rospy.get_param("baudrate", 1000000)
