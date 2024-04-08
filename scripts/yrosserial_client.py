@@ -4,7 +4,7 @@ from typing import List
 import serial
 import struct
 import time
-
+import rospy
 
 class PubInfo:
     def __init__(self) -> None:
@@ -163,11 +163,21 @@ def processMessage(message):
 # ----------------- main process -------------------- #
 subList:List[SubInfo] = []
 pubList:List[PubInfo] = []
+
+rospy.init_node("yrosserial_client")
+baudrate = rospy.get_param("baudrate", 1000000)
+port = rospy.get_param("port", "/dev/ttyACM0")
+
 # Configure the serial port settings
-serial_port = serial.Serial('/dev/ttyACM0', baudrate=1000000, timeout=1)
+try:
+    serial_port = serial.Serial(port, baudrate=baudrate, timeout=1)
+except Exception as e:
+    # Handle other types of exceptions
+    print(f"Error: {e}")
+    exit(-1)
 
+rospy.loginfo("Requesting Topic.....")
 packetRequestTopic = PacketRequestTopic()
-
 data = packetRequestTopic.serialize()
 serial_port.write(data)
 time.sleep(0.01)
@@ -177,7 +187,7 @@ messageLength = 0
 messageCnt = 0
 message = b''
 
-while 1:
+while not rospy.is_shutdown():
     while(serial_port.in_waiting > 0):
         rxData = serial_port.read(1)
         # print(f"received data: {rxData} -- ", end= "")
