@@ -12,6 +12,21 @@ from nav_msgs.msg import Odometry
 from tf.transformations import quaternion_from_euler
 import math
 
+HEADER = [5, 9]
+
+rospy.init_node("yrosserial_client")
+time.sleep(1)
+baudrate = rospy.get_param("baudrate", 1000000)
+port = rospy.get_param("port", "/dev/ttyACM0")
+
+# Configure the serial port settings
+try:
+    serial_port = serial.Serial(port, baudrate=baudrate, timeout=1)
+except Exception as e:
+    # Handle other types of exceptions
+    print(f"Error: {e}")
+    exit(-1)
+
 class ReceivingState:
     GET_HEADER1 = 0
     GET_HEADER2 = 1
@@ -32,6 +47,32 @@ messageTypeMap = {
     MessageType.Odometry2d: Odometry,
     MessageType.Twist2d: Twist
 }
+
+############### Callback ############
+class StringCallback:
+    def __init__(self, serial, id) -> None:
+        self.header = HEADER
+        self.serial = serial
+        self.id = id
+
+    def calculateChecksum(self, message, length):
+        checksum = self.id + length
+        for c in message:
+            checksum += ord(c)
+        return checksum & 0xFF 
+    
+    def serialize(self, msg) -> bytes:
+        length = len(msg) + 4 # 4 from the following parameter: id, mt, null terminator, and checksum
+        checksum = self.calculateChecksum(msg, length)
+        bytesMsg = msg.encode() + b'\0' # add null terminator
+        return struct.pack(f"5b{len(bytesMsg)}sB", self.header[0], self.header[1], length, self.id, MessageType.String, bytesMsg, checksum)
+
+    def callback(self, msg):
+        serializedData = self.serialize(msg.data)
+        # print(msg.data)
+        # print(serializedData.hex())
+        serial_port.write(serializedData)
+        
 
 class Publisher(rospy.Publisher):
     def __init__(self, name, messageType : MessageType, subscriber_listener=None, tcp_nodelay=False, latch=False, headers=None, queue_size=10):
@@ -112,11 +153,26 @@ class Publisher(rospy.Publisher):
             # print(f"Get Twist Message: x: {twistMsgX:.4f}, y:{twistMsgY:.4f}, z:{twistMsgZ:.4f} --> {self.name}")
 
 class Subscriber():
-    def __init__(self, topicName, messageType : MessageType, serial: serial.Serial):
+    def __init__(self, topicName, topicId, messageType : MessageType, serial: serial.Serial):
         if(messageType in messageTypeMap):
-            self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback)
+            self.callback = None
+            if(messageType == MessageType.String):
+                self.callback = StringCallback(serial, topicId)
+            elif(messageType == MessageType.Float32):
+                pass
+            elif(messageType == MessageType.Float64):
+                pass
+            elif(messageType == MessageType.Odometry2d):
+                pass
+            elif(messageType == MessageType.Twist2d):
+                pass
+            
+            if(self.callback is not None):
+                self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback.callback)
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
+
+    
 
     def callback(msg):
         pass
@@ -183,7 +239,7 @@ def processMessage(message):
             subInfo.topicId = dt[2]
             subInfo.type = dt[3]
             subInfo.topicName = dt[5][:-1].decode() # need to remove null terminator before decode so it will be valid for rostopic name
-            # subInfo.subscriber = Subscriber(subInfo.topicName, subInfo.type)
+            subInfo.subscriber = Subscriber(subInfo.topicName, subInfo.topicId, subInfo.type, serial_port)
 
             # print("--------- Subscribe ---------")
             # print(f"topicId     : {subInfo.topicId}")
@@ -231,19 +287,6 @@ def processMessage(message):
 # ----------------- main process -------------------- #
 subDict:Dict[int, SubInfo] = {}
 pubDict:Dict[int, PubInfo] = {}
-
-rospy.init_node("yrosserial_client")
-time.sleep(1)
-baudrate = rospy.get_param("baudrate", 1000000)
-port = rospy.get_param("port", "/dev/ttyACM0")
-
-# Configure the serial port settings
-try:
-    serial_port = serial.Serial(port, baudrate=baudrate, timeout=1)
-except Exception as e:
-    # Handle other types of exceptions
-    print(f"Error: {e}")
-    exit(-1)
 
 rospy.loginfo("Requesting Topic.....")
 pubLog = Publisher("/testX", MessageType.String)
