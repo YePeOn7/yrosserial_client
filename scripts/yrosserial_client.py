@@ -40,7 +40,7 @@ class Publisher(rospy.Publisher):
             self.messageType = messageType
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
-    
+
     def publishCustom(self, message):
         if(self.messageType == MessageType.String):
             #dt[0] --> length
@@ -111,12 +111,15 @@ class Publisher(rospy.Publisher):
             self.publish(msg)
             # print(f"Get Twist Message: x: {twistMsgX:.4f}, y:{twistMsgY:.4f}, z:{twistMsgZ:.4f} --> {self.name}")
 
-class Subscriber(rospy.Subscriber):
-    def __init__(self, name, messageType : MessageType, callback=None, callback_args=None, queue_size=None, buff_size=..., tcp_nodelay=False):
+class Subscriber():
+    def __init__(self, topicName, messageType : MessageType, serial: serial.Serial):
         if(messageType in messageTypeMap):
-            super().__init__(name, messageTypeMap[messageType], callback, callback_args, queue_size, buff_size, tcp_nodelay)
+            self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback)
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
+
+    def callback(msg):
+        pass
 
 class PubInfo:
     def __init__(self) -> None:
@@ -154,7 +157,7 @@ def messageTypeStr(messageType : MessageType):
         return "Odometry2d"
     elif(messageType == MessageType.Twist2d):
         return "Twist"
-    
+
 def processMessage(message):
     global subDict
     global pubDict
