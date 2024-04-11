@@ -149,10 +149,6 @@ class Odometry2dCallback:
         y = msg.pose.pose.position.y
         [_, _, w] = euler_from_quaternion(q)
         w = math.degrees(w)
-        # print(x)
-        # print(y)
-        # print(w)
-        # print("")
 
         packedMsg = struct.pack("3f",x, y, w)
         # print(packedMsg.hex(" "))
@@ -161,6 +157,37 @@ class Odometry2dCallback:
         return bytesMsg
 
     def callback(self, msg):
+        serializedData = self.serialize(msg)
+        # print(msg.data)
+        # print(serializedData.hex(" "))
+        serial_port.write(serializedData)
+
+class Twist2dCallback:
+    def __init__(self, serial, id) -> None:
+        self.header = HEADER
+        self.serial = serial
+        self.id = id
+
+    def calculateChecksum(self, message, length):
+        checksum = self.id + length + MessageType.Twist2d
+        for c in message:
+            checksum += c
+        return checksum & 0xFF 
+    
+    def serialize(self, msg:Twist) -> bytes:
+        length =  15 # from the following parameter: id, mt, 12bytes data, and checksum
+
+        x = msg.linear.x
+        y = msg.linear.y
+        w = msg.angular.z
+
+        packedMsg = struct.pack("3f",x, y, w)
+        # print(packedMsg.hex(" "))
+        checksum = self.calculateChecksum(packedMsg, length)
+        bytesMsg = struct.pack(f"5B12sB", self.header[0], self.header[1], length, self.id, MessageType.Twist2d, packedMsg, checksum)
+        return bytesMsg
+
+    def callback(self, msg:Twist):
         serializedData = self.serialize(msg)
         # print(msg.data)
         # print(serializedData.hex(" "))
@@ -260,7 +287,7 @@ class Subscriber():
             elif(messageType == MessageType.Odometry2d):
                 self.callback = Odometry2dCallback(serial, topicId)
             elif(messageType == MessageType.Twist2d):
-                pass
+                self.callback = Twist2dCallback(serial, topicId)
             
             if(self.callback is not None):
                 self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback.callback)
