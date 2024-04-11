@@ -9,7 +9,7 @@ from rospy.impl.tcpros import DEFAULT_BUFF_SIZE
 from std_msgs.msg import String, Float32, Float64
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from tf.transformations import quaternion_from_euler
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import math
 
 HEADER = [5, 9]
@@ -125,6 +125,47 @@ class Float64Callback:
         # print(serializedData.hex(" "))
         serial_port.write(serializedData)
 
+class Odometry2dCallback:
+    def __init__(self, serial, id) -> None:
+        self.header = HEADER
+        self.serial = serial
+        self.id = id
+
+    def calculateChecksum(self, message, length):
+        checksum = self.id + length + MessageType.Odometry2d
+        for c in message:
+            checksum += c
+        return checksum & 0xFF 
+    
+    def serialize(self, msg : Odometry) -> bytes:
+        length =  15 # from the following parameter: id, mt, 12bytes data, and checksum
+
+        q = (msg.pose.pose.orientation.x, 
+         msg.pose.pose.orientation.y, 
+         msg.pose.pose.orientation.z, 
+         msg.pose.pose.orientation.w)
+
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        [_, _, w] = euler_from_quaternion(q)
+        w = math.degrees(w)
+        # print(x)
+        # print(y)
+        # print(w)
+        # print("")
+
+        packedMsg = struct.pack("3f",x, y, w)
+        # print(packedMsg.hex(" "))
+        checksum = self.calculateChecksum(packedMsg, length)
+        bytesMsg = struct.pack(f"5B12sB", self.header[0], self.header[1], length, self.id, MessageType.Odometry2d, packedMsg, checksum)
+        return bytesMsg
+
+    def callback(self, msg):
+        serializedData = self.serialize(msg)
+        # print(msg.data)
+        # print(serializedData.hex(" "))
+        serial_port.write(serializedData)
+
 class Publisher(rospy.Publisher):
     def __init__(self, name, messageType : MessageType, subscriber_listener=None, tcp_nodelay=False, latch=False, headers=None, queue_size=10):
         if(messageType in messageTypeMap):
@@ -141,7 +182,10 @@ class Publisher(rospy.Publisher):
             #dt[3] --> string
             #dt[-1] --> checksum
             dt = struct.unpack(f"3B{message[0]-3}sB", message)
-            strMessage = dt[3][:-1].decode()
+            try:
+                strMessage = dt[3][:-1].decode()
+            except UnicodeDecodeError as e:
+                print(f"Error decoding byte sequence: {e}")
             self.publish(strMessage)
             # print(f"Get Message ({dt[1]}): {strMessage} --> {self.name}")
         elif(self.messageType == MessageType.Float32):
@@ -214,7 +258,7 @@ class Subscriber():
             elif(messageType == MessageType.Float64):
                 self.callback = Float64Callback(serial, topicId)
             elif(messageType == MessageType.Odometry2d):
-                pass
+                self.callback = Odometry2dCallback(serial, topicId)
             elif(messageType == MessageType.Twist2d):
                 pass
             
