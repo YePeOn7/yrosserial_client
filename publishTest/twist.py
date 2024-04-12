@@ -7,7 +7,7 @@ import math
 x = 0
 y = 0
 w = 0
-rospy.init_node("publish_test")
+rospy.init_node("publish_test_twist")
 pubTwist = rospy.Publisher("/subTwist", Twist, queue_size=10)
 time.sleep(0.2)
 

@@ -21,12 +21,9 @@ def setOdometry(x, y, w):
 x = 0
 y = 0
 w = 0
-rospy.init_node("publish_test")
+rospy.init_node("publish_test_odometry")
 pubOdometry = rospy.Publisher("/subOdometry", Odometry, queue_size=10)
 time.sleep(0.2)
-
-# odometryMsg = setOdometry(x, y, w)
-# pubOdometry.publish(odometryMsg)
 
 while not rospy.is_shutdown():
     print(f"{x:.2f} {y:.2f} {w:.2f}")
@@ -38,17 +35,7 @@ while not rospy.is_shutdown():
 
     if(w>360):
         w -= 360
-
-    # q = (odometryMsg.pose.pose.orientation.x, 
-    #      odometryMsg.pose.pose.orientation.y, 
-    #      odometryMsg.pose.pose.orientation.z, 
-    #      odometryMsg.pose.pose.orientation.w)
-    
-    # a = euler_from_quaternion(q)
-    # print(odometryMsg.pose.pose.orientation)
-    # print(math.degrees(a[2]))
-    # pubOdometry.publish()
         
     pubOdometry.publish(odometryMsg)
-
-    time.sleep(0.1)
+    # exit(0)
+    time.sleep(0.01)

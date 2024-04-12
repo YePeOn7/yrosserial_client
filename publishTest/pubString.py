@@ -10,8 +10,6 @@ x = 0
 i = 0
 while not rospy.is_shutdown():
     s = f"abcdefghijklmnopqrstuvwxyz {i%10}"
-    # s = f"abcdefghijklmnopqrstuvwxyz"
-    # s = f"12345678901234567890"
     print(s)
     # if(i == 1):
     #     exit(0)
