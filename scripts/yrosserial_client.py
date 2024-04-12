@@ -236,6 +236,8 @@ class Publisher(rospy.Publisher):
             super().__init__(name, messageTypeMap[messageType], subscriber_listener, tcp_nodelay, latch, headers, queue_size)
             self.messageType = messageType
             self.arrayType = [getattr(MessageType, i) for i in dir(MessageType) if ("MultiArray" in i)]
+            self.nonArrayType = [getattr(MessageType, i) for i in dir(MessageType) if ("MultiArray" not in i and ("Int" in i or "Float" in i))]
+
             self.mapFormat = {
                 MessageType.Float32: "f",
                 MessageType.Float64: "d",
@@ -341,6 +343,16 @@ class Publisher(rospy.Publisher):
             byteArraySize = message[0] - 5 # length packet - 5, 5 is lengthInfo, topicId, MessageType and 2 bytes of length info or array
             try:
                 data = struct.unpack(f"{length}{self.mapFormat[self.messageType]}", message[5:5+(byteArraySize)])
+                msg = messageTypeMap[self.messageType]()
+                msg.data = data
+                self.publish(msg)
+            except Exception as e:
+                traceback.print_exc()
+                print(e)
+        elif(self.messageType in self.nonArrayType):
+            byteArraySize = message[0] - 3 # length packet - 3, 3 is lengthInfo, topicId, and MessageType
+            try:
+                (data,) = struct.unpack(f"{self.mapFormat[self.messageType]}", message[3:3+(byteArraySize)])
                 msg = messageTypeMap[self.messageType]()
                 msg.data = data
                 self.publish(msg)
@@ -485,7 +497,6 @@ subDict:Dict[int, SubInfo] = {}
 pubDict:Dict[int, PubInfo] = {}
 
 rospy.loginfo("Requesting Topic.....")
-pubLog = Publisher("/testX", MessageType.String)
 packetRequestTopic = PacketRequestTopic()
 data = packetRequestTopic.serialize()
 serial_port.write(data)
