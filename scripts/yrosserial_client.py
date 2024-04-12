@@ -6,11 +6,12 @@ import struct
 import time
 import rospy
 from rospy.impl.tcpros import DEFAULT_BUFF_SIZE
-from std_msgs.msg import String, Float32, Float64
+from std_msgs.msg import *
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import math
+import traceback
 
 HEADER = [5, 9]
 
@@ -39,13 +40,49 @@ class MessageType:
     Float64 = 2
     Odometry2d = 3
     Twist2d = 4
-
+    UInt8 = 5
+    Int8 = 6
+    UInt16 = 7
+    Int16 = 8
+    UInt32 = 9
+    Int32 = 10
+    UInt64 = 11
+    Int64 = 12
+    UInt8MultiArray = 13
+    Int8MultiArray = 14
+    UInt16MultiArray = 15
+    Int16MultiArray = 16
+    UInt32MultiArray = 17
+    Int32MultiArray = 18
+    UInt64MultiArray = 19
+    Int64MultiArray = 20
+    Float32MultiArray = 21
+    Float64MultiArray = 22
+    
 messageTypeMap = {
     MessageType.Float32: Float32,
     MessageType.Float64: Float64,
     MessageType.String: String,
     MessageType.Odometry2d: Odometry,
-    MessageType.Twist2d: Twist
+    MessageType.Twist2d: Twist,
+    MessageType.UInt8: UInt8,
+    MessageType.Int8: Int8,
+    MessageType.UInt16: UInt16,
+    MessageType.Int16: Int16,
+    MessageType.UInt32: UInt32,
+    MessageType.Int32: Int32,
+    MessageType.UInt64: UInt64,
+    MessageType.Int64: Int64,
+    MessageType.UInt8MultiArray: UInt8MultiArray,
+    MessageType.Int8MultiArray: Int8MultiArray,
+    MessageType.UInt16MultiArray: UInt16MultiArray,
+    MessageType.Int16MultiArray: Int16MultiArray,
+    MessageType.UInt32MultiArray: UInt32MultiArray,
+    MessageType.Int32MultiArray: Int32MultiArray,
+    MessageType.UInt64MultiArray: UInt64MultiArray,
+    MessageType.Int64MultiArray: Int64MultiArray,
+    MessageType.Float32MultiArray: Float32MultiArray,
+    MessageType.Float64MultiArray: Float64MultiArray,
 }
 
 ############### Callback ############
@@ -198,6 +235,32 @@ class Publisher(rospy.Publisher):
         if(messageType in messageTypeMap):
             super().__init__(name, messageTypeMap[messageType], subscriber_listener, tcp_nodelay, latch, headers, queue_size)
             self.messageType = messageType
+            self.arrayType = [getattr(MessageType, i) for i in dir(MessageType) if ("MultiArray" in i)]
+            self.mapFormat = {
+                MessageType.Float32: "f",
+                MessageType.Float64: "d",
+                MessageType.String: "s",
+                MessageType.Odometry2d: "f",
+                MessageType.Twist2d: "f",
+                MessageType.UInt8: "B",
+                MessageType.Int8: "b",
+                MessageType.UInt16: "H",
+                MessageType.Int16: "h",
+                MessageType.UInt32: "I",
+                MessageType.Int32: "i",
+                MessageType.UInt64: "Q",
+                MessageType.Int64: "q",
+                MessageType.UInt8MultiArray: "B",
+                MessageType.Int8MultiArray: "b",
+                MessageType.UInt16MultiArray: "H",
+                MessageType.Int16MultiArray: "h",
+                MessageType.UInt32MultiArray: "I",
+                MessageType.Int32MultiArray: "i",
+                MessageType.UInt64MultiArray: "Q",
+                MessageType.Int64MultiArray: "q",
+                MessageType.Float32MultiArray: "f",
+                MessageType.Float64MultiArray: "d",
+            }
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
 
@@ -273,6 +336,18 @@ class Publisher(rospy.Publisher):
             msg.angular.z = twistMsgZ
             self.publish(msg)
             # print(f"Get Twist Message: x: {twistMsgX:.4f}, y:{twistMsgY:.4f}, z:{twistMsgZ:.4f} --> {self.name}")
+        elif(self.messageType in self.arrayType):
+            (length,) = struct.unpack(f"<H", message[3:5])
+            byteArraySize = message[0] - 5 # length packet - 5, 5 is lengthInfo, topicId, MessageType and 2 bytes of length info or array
+            try:
+                data = struct.unpack(f"{length}{self.mapFormat[self.messageType]}", message[5:5+(byteArraySize)])
+                msg = messageTypeMap[self.messageType]()
+                msg.data = data
+                self.publish(msg)
+            except Exception as e:
+                traceback.print_exc()
+                print(e)
+                
 
 class Subscriber():
     def __init__(self, topicName, topicId, messageType : MessageType, serial: serial.Serial):
@@ -325,16 +400,15 @@ class PacketRequestTopic:
         return struct.pack("5b", self.header1, self.header2, self.length, self.instruction, self.checksum)
 
 def messageTypeStr(messageType : MessageType):
-    if(messageType == MessageType.Float32):
-        return "Float32"
-    elif(messageType == MessageType.Float64):
-        return "Float64"
-    elif(messageType == MessageType.String):
-        return "String"
-    elif(messageType == MessageType.Odometry2d):
-        return "Odometry2d"
-    elif(messageType == MessageType.Twist2d):
-        return "Twist"
+    attrs = [i for i in dir(MessageType) if (not callable(i) and not i.startswith("__"))]
+    mt = {}
+    for i in attrs:
+        mt[getattr(MessageType, i)] = i
+
+    if(messageType in mt):
+        return mt[messageType]
+    else:
+        return "undefined"
 
 def processMessage(message):
     global subDict
