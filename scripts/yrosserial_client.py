@@ -110,58 +110,6 @@ class StringCallback:
         # print(serializedData.hex())
         serial_port.write(serializedData)
 
-class Float32Callback:
-    def __init__(self, serial, id) -> None:
-        self.header = HEADER
-        self.serial = serial
-        self.id = id
-
-    def calculateChecksum(self, message, length):
-        checksum = self.id + length + MessageType.Float32
-        for c in message:
-            checksum += c
-        return checksum & 0xFF 
-    
-    def serialize(self, msg) -> bytes:
-        length =  7 # from the following parameter: id, mt, 4bytes data, and checksum
-        packedMsg = struct.pack("f",msg)
-        # print(packedMsg.hex(" "))
-        checksum = self.calculateChecksum(packedMsg, length)
-        bytesMsg = struct.pack(f"5B4sB", self.header[0], self.header[1], length, self.id, MessageType.Float32, packedMsg, checksum)
-        return bytesMsg
-
-    def callback(self, msg):
-        serializedData = self.serialize(msg.data)
-        # print(msg.data)
-        # print(serializedData.hex(" "))
-        serial_port.write(serializedData)
-
-class Float64Callback:
-    def __init__(self, serial, id) -> None:
-        self.header = HEADER
-        self.serial = serial
-        self.id = id
-
-    def calculateChecksum(self, message, length):
-        checksum = self.id + length + MessageType.Float64
-        for c in message:
-            checksum += c
-        return checksum & 0xFF 
-    
-    def serialize(self, msg) -> bytes:
-        length =  11 # from the following parameter: id, mt, 8bytes data, and checksum
-        packedMsg = struct.pack("d",msg)
-        # print(packedMsg.hex(" "))
-        checksum = self.calculateChecksum(packedMsg, length)
-        bytesMsg = struct.pack(f"5B8sB", self.header[0], self.header[1], length, self.id, MessageType.Float64, packedMsg, checksum)
-        return bytesMsg
-
-    def callback(self, msg):
-        serializedData = self.serialize(msg.data)
-        # print(msg.data)
-        # print(serializedData.hex(" "))
-        serial_port.write(serializedData)
-
 class Odometry2dCallback:
     def __init__(self, serial, id) -> None:
         self.header = HEADER
@@ -400,10 +348,6 @@ class Subscriber():
                 self.callback = None
                 if(messageType == MessageType.String):
                     self.callback = StringCallback(serial, topicId)
-                # elif(messageType == MessageType.Float32):
-                #     self.callback = Float32Callback(serial, topicId)
-                # elif(messageType == MessageType.Float64):
-                #     self.callback = Float64Callback(serial, topicId)
                 elif(messageType == MessageType.Odometry2d):
                     self.callback = Odometry2dCallback(serial, topicId)
                 elif(messageType == MessageType.Twist2d):
@@ -415,8 +359,6 @@ class Subscriber():
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
         
-
-
     def calculateChecksum(self, data, l_packet):
         sum = self.messageType + self.topicId + l_packet
         for i in data:
