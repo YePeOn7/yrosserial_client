@@ -2,14 +2,14 @@ import rospy
 from std_msgs.msg import *
 import time
 
-def incrementWithLimit(data, limit, startValue):
-    data += 1
+def incrementWithLimit(data, limit, startValue, inc = 1):
+    data += inc
     if(data > limit):
         data = startValue
     return data
 
-def decrementWithLimit(data, limit, startValue):
-    data -= 1
+def decrementWithLimit(data, limit, startValue, dec = 1):
+    data -= dec
     if(data < limit):
         data = startValue
     return data
@@ -23,6 +23,8 @@ pubU32 = rospy.Publisher("/sub_u32", UInt32, queue_size=10)
 pubS32 = rospy.Publisher("/sub_s32", Int32, queue_size=10)
 pubU64 = rospy.Publisher("/sub_u64", UInt64, queue_size=10)
 pubS64 = rospy.Publisher("/sub_s64", Int64, queue_size=10)
+pubF32 = rospy.Publisher("/sub_f32", Float32, queue_size=10)
+pubF64 = rospy.Publisher("/sub_f64", Float64, queue_size=10)
 time.sleep(0.1)
 
 u8Msg = UInt8()
@@ -33,6 +35,8 @@ u32Msg = UInt32()
 s32Msg = Int32()
 u64Msg = UInt64()
 s64Msg = Int64()
+f32Msg = Float32()
+f64Msg = Float64()
 
 u8Msg.data = 123
 s8Msg.data = -123
@@ -52,6 +56,8 @@ while not rospy.is_shutdown():
     pubS32.publish(s32Msg)
     pubU64.publish(u64Msg)
     pubS64.publish(s64Msg)
+    pubF32.publish(f32Msg)
+    pubF64.publish(f64Msg)
 
     u8Msg.data = incrementWithLimit(u8Msg.data, 255, 0)
     s8Msg.data = decrementWithLimit(s8Msg.data, -127, 127)
@@ -61,9 +67,10 @@ while not rospy.is_shutdown():
     s32Msg.data = decrementWithLimit(s32Msg.data, -2147483647, 2147483647)
     u64Msg.data = incrementWithLimit(u64Msg.data, 18446744073709551615, 0)
     s64Msg.data = decrementWithLimit(s64Msg.data, -9223372036854775808, 9223372036854775807)
+    f32Msg.data = incrementWithLimit(f32Msg.data, 100, -100, 0.1)
+    f64Msg.data = decrementWithLimit(f64Msg.data, -100, 100, 0.1)
 
 
-    # print(u8mMsg.data)
-    # print(s8mMsg.data)
+    # print(f64Msg.data)
     # exit(0)
     time.sleep(0.1)
