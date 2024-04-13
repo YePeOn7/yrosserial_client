@@ -360,31 +360,86 @@ class Publisher(rospy.Publisher):
                 traceback.print_exc()
                 print(e)
                 
-
 class Subscriber():
     def __init__(self, topicName, topicId, messageType : MessageType, serial: serial.Serial):
+        self.messageType = messageType
+        self.serial = serial
+        self.topicId = topicId
+        self.arrayType = [getattr(MessageType, i) for i in dir(MessageType) if ("MultiArray" in i)]
+        self.nonArrayType = [getattr(MessageType, i) for i in dir(MessageType) if ("MultiArray" not in i and ("Int" in i or "Float" in i))]
+        self.mapFormat = {
+            MessageType.Float32: "f",
+            MessageType.Float64: "d",
+            MessageType.String: "s",
+            MessageType.Odometry2d: "f",
+            MessageType.Twist2d: "f",
+            MessageType.UInt8: "B",
+            MessageType.Int8: "b",
+            MessageType.UInt16: "H",
+            MessageType.Int16: "h",
+            MessageType.UInt32: "I",
+            MessageType.Int32: "i",
+            MessageType.UInt64: "Q",
+            MessageType.Int64: "q",
+            MessageType.UInt8MultiArray: "B",
+            MessageType.Int8MultiArray: "b",
+            MessageType.UInt16MultiArray: "H",
+            MessageType.Int16MultiArray: "h",
+            MessageType.UInt32MultiArray: "I",
+            MessageType.Int32MultiArray: "i",
+            MessageType.UInt64MultiArray: "Q",
+            MessageType.Int64MultiArray: "q",
+            MessageType.Float32MultiArray: "f",
+            MessageType.Float64MultiArray: "d",
+        }
+        self.format = self.mapFormat[self.messageType]
         if(messageType in messageTypeMap):
-            self.callback = None
-            if(messageType == MessageType.String):
-                self.callback = StringCallback(serial, topicId)
-            elif(messageType == MessageType.Float32):
-                self.callback = Float32Callback(serial, topicId)
-            elif(messageType == MessageType.Float64):
-                self.callback = Float64Callback(serial, topicId)
-            elif(messageType == MessageType.Odometry2d):
-                self.callback = Odometry2dCallback(serial, topicId)
-            elif(messageType == MessageType.Twist2d):
-                self.callback = Twist2dCallback(serial, topicId)
+            if(messageType in self.nonArrayType or messageType in self.arrayType):
+                self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback)
+            else:
+                self.callback = None
+                if(messageType == MessageType.String):
+                    self.callback = StringCallback(serial, topicId)
+                # elif(messageType == MessageType.Float32):
+                #     self.callback = Float32Callback(serial, topicId)
+                # elif(messageType == MessageType.Float64):
+                #     self.callback = Float64Callback(serial, topicId)
+                elif(messageType == MessageType.Odometry2d):
+                    self.callback = Odometry2dCallback(serial, topicId)
+                elif(messageType == MessageType.Twist2d):
+                    self.callback = Twist2dCallback(serial, topicId)
             
-            if(self.callback is not None):
-                self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback.callback)
+                if(self.callback is not None):
+                    print(f"Subs to {topicName}")
+                    self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback.callback)
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
+        
 
-    
 
-    def callback(msg):
-        pass
+    def calculateChecksum(self, data, l_packet):
+        sum = self.messageType + self.topicId + l_packet
+        for i in data:
+            sum += i
+        return sum & 0xFF
+
+    def callback(self, msg):
+        if(self.messageType in self.nonArrayType):
+            d = struct.pack(f"<{self.format}", msg.data)
+            l_packet = len(d) + 3
+            checksum = self.calculateChecksum(d, l_packet)
+
+            serializedData = struct.pack(f"5B{len(d)}sB", *HEADER, l_packet, self.topicId, self.messageType, d, checksum)
+            # print("non array -->", serializedData.hex(" "))
+            self.serial.write(serializedData)
+        elif(self.messageType in self.arrayType):
+            l = len(msg.data)
+            d = struct.pack(f"<H{l}{self.format}", l, *msg.data)
+            l_packet = len(d) + 3
+            checksum = self.calculateChecksum(d, l_packet)
+            serializedData = struct.pack(f"5B{len(d)}sB", *HEADER, l_packet, self.topicId, self.messageType, d, checksum)
+            # print("array -->", serializedData.hex(" "))
+            self.serial.write(serializedData)
 
 class PubInfo:
     def __init__(self) -> None:
