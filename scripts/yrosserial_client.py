@@ -354,7 +354,6 @@ class Subscriber():
                     self.callback = Twist2dCallback(serial, topicId)
             
                 if(self.callback is not None):
-                    print(f"Subs to {topicName}")
                     self.subscriber = rospy.Subscriber(topicName, messageTypeMap[messageType], self.callback.callback)
         else:
             raise ValueError(f"Unsupported messageType: {messageType}")
@@ -493,6 +492,10 @@ def processMessage(message):
 subDict:Dict[int, SubInfo] = {}
 pubDict:Dict[int, PubInfo] = {}
 
+# Clean rx buffer before start
+while(serial_port.in_waiting):
+    serial_port.read()
+    
 rospy.loginfo("Requesting Topic.....")
 packetRequestTopic = PacketRequestTopic()
 data = packetRequestTopic.serialize()
