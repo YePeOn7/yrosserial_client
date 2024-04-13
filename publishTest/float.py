@@ -25,4 +25,4 @@ while not rospy.is_shutdown():
 
     # exit(0)
 
-    time.sleep(0.01)
+    time.sleep(0.1)

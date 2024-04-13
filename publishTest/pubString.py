@@ -16,4 +16,4 @@ while not rospy.is_shutdown():
     i += 1
     pubString.publish(s)
     x += 1
-    time.sleep(0.02)
+    time.sleep(0.1)

@@ -38,4 +38,4 @@ while not rospy.is_shutdown():
         
     pubOdometry.publish(odometryMsg)
     # exit(0)
-    time.sleep(0.01)
+    time.sleep(0.1)
