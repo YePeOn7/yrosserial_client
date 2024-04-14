@@ -19,6 +19,7 @@ rospy.init_node("yrosserial_client")
 time.sleep(1)
 baudrate = rospy.get_param("baudrate", 1000000)
 port = rospy.get_param("port", "/dev/ttyACM0")
+expectedTopicIdResponse = 10
 
 # Configure the serial port settings
 try:
@@ -423,9 +424,22 @@ def messageTypeStr(messageType : MessageType):
     else:
         return "undefined"
 
+def retryRequestTopic():
+    global expectedTopicIdResponse
+    print("Attempting to request topic again...")
+
+    expectedTopicIdResponse = 0
+    time.sleep(0.5)
+    # clean rx buffer
+    while serial_port.in_waiting:
+        serial_port.read()
+    packetRequestTopic.send()
+
 def processMessage(message):
     global subDict
     global pubDict
+    global expectedTopicIdResponse
+    
     messageLen = message[0]
     # check message[1] --> instruction / TopicId
     # no need to convert message[1] to int. When accessing the bytes variable by using []. it will automatically convert into int
@@ -450,13 +464,18 @@ def processMessage(message):
             subInfo.topicName = dt[5][:-1].decode() # need to remove null terminator before decode so it will be valid for rostopic name
             subInfo.subscriber = Subscriber(subInfo.topicName, subInfo.topicId, subInfo.type, serial_port)
 
-            # print("--------- Subscribe ---------")
-            # print(f"topicId     : {subInfo.topicId}")
-            # print(f"type        : {subInfo.type}")
-            # print(f"topicName   : {subInfo.topicName}")
-            # print("--------------")
-            print(f"Subscribe: {subInfo.topicName} ({messageTypeStr(subInfo.type)}) with topicId: {subInfo.topicId}")
-            subDict[subInfo.topicId] = subInfo
+            if subInfo.topicId != expectedTopicIdResponse:
+                retryRequestTopic()
+            else:
+                expectedTopicIdResponse += 1
+
+                # print("--------- Subscribe ---------")
+                # print(f"topicId     : {subInfo.topicId}")
+                # print(f"type        : {subInfo.type}")
+                # print(f"topicName   : {subInfo.topicName}")
+                # print("--------------")
+                print(f"Subscribe: {subInfo.topicName} ({messageTypeStr(subInfo.type)}) with topicId: {subInfo.topicId}")
+                subDict[subInfo.topicId] = subInfo
 
         if(dt[4] == 1): #Pub
             pubInfo = PubInfo()
@@ -465,13 +484,19 @@ def processMessage(message):
             pubInfo.topicName = dt[5][:-1].decode() # need to remove null terminator before decode so it will be valid for rostopic name
             pubInfo.publisher = Publisher(pubInfo.topicName, pubInfo.type)
 
-            # print("--------- Publish ---------")
-            # print(f"topicId     : {pubInfo.topicId}")
-            # print(f"type        : {pubInfo.type}")
-            # print(f"topicName   : {pubInfo.topicName}")
-            # print("--------------")
-            print(f"Publish: {pubInfo.topicName} ({messageTypeStr(pubInfo.type)}) with topicId: {pubInfo.topicId}")
-            pubDict[pubInfo.topicId] = pubInfo # append to dict
+            if pubInfo.topicId != expectedTopicIdResponse:
+                retryRequestTopic()
+                expectedTopicIdResponse = 10
+            else:
+                expectedTopicIdResponse += 1
+
+                # print("--------- Publish ---------")
+                # print(f"topicId     : {pubInfo.topicId}")
+                # print(f"type        : {pubInfo.type}")
+                # print(f"topicName   : {pubInfo.topicName}")
+                # print("--------------")
+                print(f"Publish: {pubInfo.topicName} ({messageTypeStr(pubInfo.type)}) with topicId: {pubInfo.topicId}")
+                pubDict[pubInfo.topicId] = pubInfo # append to dict
 
         # print(dt)
     elif message[1] == 0x03:
@@ -497,9 +522,8 @@ def processMessage(message):
 subDict:Dict[int, SubInfo] = {}
 pubDict:Dict[int, PubInfo] = {}
 
-time.sleep(0.1)
+time.sleep(0.05)
 
-# Clean rx buffer before start
 while(serial_port.in_waiting):
     serial_port.read()
     
