@@ -508,7 +508,7 @@ messageCnt = 0
 message = b''
 
 while not rospy.is_shutdown():
-    while(serial_port.in_waiting > 0):
+    while(not rospy.is_shutdown() and serial_port.in_waiting > 0):
         rxData = serial_port.read(1)
         # print(f"received data: {rxData} -- ", end= "")
         # continue
@@ -536,7 +536,7 @@ while not rospy.is_shutdown():
 
             if(messageCnt == messageLength):
                 # process
-                # print(message)
+                # print(message.hex(" "))
                 # print(message[0], rxData[0])
                 processMessage(message)
 
