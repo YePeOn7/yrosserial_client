@@ -397,15 +397,20 @@ class SubInfo:
         self.subscriber : Optional[Subscriber] = None
 
 class PacketRequestTopic:
-    def __init__(self, header1 = 0x05, header2 = 0x09, length = 0x02, instruction = 0x01):
+    def __init__(self, serial, header1 = 0x05, header2 = 0x09, length = 0x02, instruction = 0x01):
         self.header1 = header1
         self.header2 = header2
         self.length = length
         self.instruction = instruction
         self.checksum = self.length + self.instruction
+        self.serial = serial
 
     def serialize(self) -> bytes:
         return struct.pack("5b", self.header1, self.header2, self.length, self.instruction, self.checksum)
+    
+    def send(self):
+        data = self.serialize()
+        self.serial.write(data)
 
 def messageTypeStr(messageType : MessageType):
     attrs = [i for i in dir(MessageType) if (not callable(i) and not i.startswith("__"))]
@@ -492,14 +497,16 @@ def processMessage(message):
 subDict:Dict[int, SubInfo] = {}
 pubDict:Dict[int, PubInfo] = {}
 
+time.sleep(0.1)
+
 # Clean rx buffer before start
 while(serial_port.in_waiting):
     serial_port.read()
     
 rospy.loginfo("Requesting Topic.....")
-packetRequestTopic = PacketRequestTopic()
-data = packetRequestTopic.serialize()
-serial_port.write(data)
+packetRequestTopic = PacketRequestTopic(serial_port)
+packetRequestTopic.send()
+
 time.sleep(0.01)
 
 receivingState = ReceivingState.GET_HEADER1
